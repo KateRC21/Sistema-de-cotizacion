@@ -1,0 +1,33 @@
+[project]
+name = "asistente-compras"
+version = "0.1.0"
+description = "Asistente de compras que compara Jumbo y Superboom con LangGraph, LangChain y Pydantic"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.2.50",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.10",
+    "pydantic>=2.7",
+    "pandas>=2.2",
+    "python-dotenv>=1.0",
+    "streamlit>=1.67.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv]
+# Aplicación académica: uv gestiona el entorno y no empaqueta una librería.
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "red: consulta real al catálogo público de Jumbo o Superboom",
+    "llm: interpretación real con la API de OpenAI",
+]
+addopts = "-m 'not red and not llm'"

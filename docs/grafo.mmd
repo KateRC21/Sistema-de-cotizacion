@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	interpretar(interpretar)
+	validar(validar)
+	aclarar(aclarar)
+	jumbo(jumbo)
+	superboom(superboom)
+	consolidar(consolidar)
+	normalizar(normalizar)
+	comparar(comparar)
+	presupuesto(presupuesto)
+	informe(informe)
+	cerrar(cerrar)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> interpretar;
+	aclarar --> interpretar;
+	cerrar --> informe;
+	comparar --> presupuesto;
+	consolidar --> normalizar;
+	interpretar --> validar;
+	jumbo --> consolidar;
+	normalizar --> comparar;
+	presupuesto --> informe;
+	superboom --> consolidar;
+	validar -.-> aclarar;
+	validar -.-> cerrar;
+	validar -.-> jumbo;
+	validar -.-> superboom;
+	informe --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
