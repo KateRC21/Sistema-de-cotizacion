@@ -79,6 +79,10 @@ def _preparar(item: ItemSolicitado, oferta: Cotizacion) -> _Lista:
     medida = None
     if oferta.cantidad is not None and oferta.unidad:
         medida = normalizar_medida(oferta.cantidad, oferta.unidad)
+    # «1 paquete», «1 bolsa»: se compara por empaque, sea cual sea su peso.
+    por_empaque = item.unidad == "unidad"
+    if por_empaque and (medida is None or medida.dimension != "conteo"):
+        medida = MedidaNormalizada(cantidad=Decimal("1"), unidad="unidad", dimension="conteo")
     precio_base = None
     if medida is not None and oferta.precio > 0:
         precio_base = precio_por_unidad_base(oferta.precio, medida)
@@ -97,7 +101,8 @@ def _motivo_exclusion(
         return "La oferta no está disponible o no tiene un precio utilizable."
     if medida is None:
         return "La oferta no trae una cantidad y una unidad comparables."
-    if item.unidad and not misma_dimension(item.unidad, oferta.unidad):
+    if item.unidad != "unidad" and item.unidad and not misma_dimension(item.unidad, oferta.unidad):
+        # (un pedido por empaque acepta cualquier presentación)
         return "La unidad de la oferta no se puede comparar con la unidad pedida."
     marca = _marca_coincide(item.marca, oferta.marca)
     if marca is None:
@@ -117,19 +122,34 @@ def _clasificar(
     candidatos: list[tuple[ItemSolicitado, _Lista]],
     clasificador: Runnable,
 ) -> dict[tuple[str, str], ClasificacionOfertaLLM]:
-    contexto = _contexto(candidatos)
+    # Una llamada por producto, en paralelo: una sola con todas las ofertas
+    # tarda minutos cuando la lista es larga.
+    por_item: dict[str, list[tuple[ItemSolicitado, _Lista]]] = {}
+    for item, lista in candidatos:
+        por_item.setdefault(item.id_item, []).append((item, lista))
+    entradas = [{"contexto": _contexto(grupo)} for grupo in por_item.values()]
     try:
-        salida = clasificador.invoke({"contexto": contexto})
-        if not isinstance(salida, ClasificacionEquivalenciasLLM):
-            salida = ClasificacionEquivalenciasLLM.model_validate(salida)
+        salidas = clasificador.batch(
+            entradas, config={"max_concurrency": 8}, return_exceptions=True
+        )
     except Exception:
         return {}
+    clasificaciones: list[ClasificacionOfertaLLM] = []
+    for salida in salidas:
+        if isinstance(salida, Exception):
+            continue  # Ese producto queda sin clasificar: no comparable, sin inventar.
+        try:
+            if not isinstance(salida, ClasificacionEquivalenciasLLM):
+                salida = ClasificacionEquivalenciasLLM.model_validate(salida)
+        except Exception:
+            continue
+        clasificaciones.extend(salida.clasificaciones)
 
     validos = {
         (item.id_item, lista.cotizacion.id_oferta) for item, lista in candidatos
     }
     indice: dict[tuple[str, str], ClasificacionOfertaLLM] = {}
-    for clasificacion in salida.clasificaciones:
+    for clasificacion in clasificaciones:
         clave = (clasificacion.id_item.strip(), clasificacion.id_oferta.strip())
         if clave not in validos or not clasificacion.motivo.strip():
             continue
@@ -204,6 +224,10 @@ def _ajustar_relacion(
 ) -> tuple[Relacion, str | None]:
     if relacion == "no_comparable":
         return relacion, None
+    if relacion == "sustituto" and not item.marca and not item.caracteristicas:
+        # Sin marca ni característica pedidas, otra marca o variedad común no
+        # es un sustituto: es lo que la persona aceptó al pedir el producto en general.
+        return "equivalente", "No pediste marca ni característica: se toma como equivalente."
     marca = _marca_coincide(item.marca, oferta.marca)
     if marca is False and relacion == "equivalente":
         if item.acepta_sustitutos:

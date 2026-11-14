@@ -1,6 +1,6 @@
 """Consulta del catálogo público de Jumbo Colombia."""
 
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from compras.schemas import ErrorConsulta, ResultadoProveedor
 
@@ -32,7 +32,7 @@ def consultar_jumbo(
         )
 
     cliente = cliente or ClienteCatalogo.desde_config()
-    url = f"{BASE}{RUTA}?{urlencode({'ft': texto, '_from': 0, '_to': cliente.max_resultados - 1})}"
+    url = f"{BASE}{RUTA}?{urlencode({'ft': texto, '_from': 0, '_to': cliente.max_resultados - 1}, quote_via=quote)}"
     try:
         respuesta = cliente.obtener(url)
     except Exception as exc:

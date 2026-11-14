@@ -43,6 +43,24 @@ def presentacion_desde_nombre(nombre: str) -> tuple[str | None, Decimal | None, 
     return f"{_texto_cantidad(cantidad)} {unidad}", cantidad, unidad
 
 
+_CONTEO = re.compile(
+    r"(?<!\d)(\d+)\s*(?:und|unds|unidades|unidad|huevos)\b|\bx\s*(\d+)\b(?!\s*[.,]?\d*\s*(?:kg|grs|gr|g|ml|cc|litros|litro|lt|l)\b)",
+    re.IGNORECASE,
+)
+
+
+def conteo_desde_nombre(nombre: str) -> tuple[str | None, Decimal | None, str | None]:
+    """Cuenta de piezas escrita en el nombre («x30», «18 Unidades»). Solo sin peso ni volumen."""
+    coincidencias = list(_CONTEO.finditer(nombre))
+    if not coincidencias:
+        return None, None, None
+    ultima = coincidencias[-1]
+    cantidad = Decimal(ultima.group(1) or ultima.group(2))
+    if cantidad <= 0:
+        return None, None, None
+    return f"{_texto_cantidad(cantidad)} unidad", cantidad, "unidad"
+
+
 def presentacion_desde_sku(
     nombre: str,
     unidad_api: str | None,
@@ -53,10 +71,10 @@ def presentacion_desde_sku(
         return explicita
     unidad = _UNIDADES_API.get((unidad_api or "").strip().lower())
     if unidad is None or multiplicador is None:
-        return None, None, None
+        return conteo_desde_nombre(nombre)
     cantidad = multiplicador if isinstance(multiplicador, Decimal) else Decimal(multiplicador)
     if cantidad <= 0:
-        return None, None, None
+        return conteo_desde_nombre(nombre)
     return f"{_texto_cantidad(cantidad)} {unidad}", cantidad, unidad
 
 
@@ -74,6 +92,9 @@ def armar_cotizacion(
     fecha_consulta: date,
     disponibilidad: str,
     id_item: str | None,
+    url_imagen: str | None = None,
+    id_sku: str | None = None,
+    id_vendedor: str | None = None,
 ) -> tuple[Cotizacion | None, ErrorConsulta | None]:
     """Valida una oferta. Si los datos no cuadran, devuelve el error y no un precio supuesto."""
     try:
@@ -92,6 +113,9 @@ def armar_cotizacion(
             disponibilidad=disponibilidad,  # type: ignore[arg-type]
             estado_verificacion="consulta_publica",
             id_item=id_item,
+            url_imagen=url_imagen,
+            id_sku=id_sku,
+            id_vendedor=id_vendedor,
         )
     except (ValidationError, ValueError) as exc:
         return None, ErrorConsulta(

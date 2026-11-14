@@ -10,7 +10,7 @@ from urllib.parse import urlencode, urljoin
 
 from compras.schemas import ErrorConsulta, ResultadoProveedor
 
-from tools.catalogos import armar_cotizacion, presentacion_desde_nombre
+from tools.catalogos import armar_cotizacion, conteo_desde_nombre, presentacion_desde_nombre
 from tools.cliente_http import ClienteCatalogo
 
 BASE = "https://web.superboom.net"
@@ -108,6 +108,8 @@ def _cotizar(ficha: dict[str, str], *, id_item: str | None, fecha):
     ruta = ficha["href"].split("?")[0]
     slug = ruta.rstrip("/").split("/")[-1]
     presentacion, cantidad, unidad = presentacion_desde_nombre(nombre)
+    if presentacion is None:
+        presentacion, cantidad, unidad = conteo_desde_nombre(nombre)
     disponibilidad = "no_disponible" if "OutOfStock" in ficha["disponibilidad"] else "disponible"
     return armar_cotizacion(
         id_oferta=f"superboom-{slug}",
@@ -122,6 +124,7 @@ def _cotizar(ficha: dict[str, str], *, id_item: str | None, fecha):
         fecha_consulta=fecha,
         disponibilidad=disponibilidad,
         id_item=id_item,
+        url_imagen=urljoin(BASE, ficha["imagen"]) if ficha.get("imagen") else None,
     )
 
 
@@ -146,9 +149,14 @@ class _Fichas(HTMLParser):
         self.fichas: list[dict[str, str]] = []
         self._actual: dict[str, str] | None = None
         self._campo: str | None = None
+        self._imagen = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         atributos = {clave: valor or "" for clave, valor in attrs}
+        if tag == "img" and "/web/image/product.template/" in atributos.get("src", ""):
+            # La foto aparece justo antes del nombre de su ficha.
+            self._imagen = atributos["src"]
+            return
         itemprop = atributos.get("itemprop")
         if tag == "a" and itemprop == "name":
             self._cerrar()
@@ -162,7 +170,9 @@ class _Fichas(HTMLParser):
                 "precio": "",
                 "moneda": "",
                 "disponibilidad": atributos.get("disponibilidad", ""),
+                "imagen": self._imagen,
             }
+            self._imagen = ""
             self._campo = None if nombre else "nombre"
             return
         if self._actual is None or not itemprop:

@@ -37,6 +37,7 @@ def construir_grafo(
     consultar_superboom: Consultor = consultar_superboom_web,
     ciudad_defecto: str = "Medellín",
     max_aclaraciones: int = 3,
+    suponer_cantidad: bool = False,
     checkpointer: MemorySaver | None = None,
 ) -> CompiledStateGraph:
     """Compila el grafo. Las pruebas inyectan el LLM y las consultas.
@@ -45,7 +46,7 @@ def construir_grafo(
     """
     grafo = StateGraph(EstadoCompra)
     grafo.add_node("interpretar", crear_nodo_interpretar(interpretador))
-    grafo.add_node("validar", crear_nodo_validar(ciudad_defecto))
+    grafo.add_node("validar", crear_nodo_validar(ciudad_defecto, suponer_cantidad))
     grafo.add_node("aclarar", crear_nodo_aclarar(max_aclaraciones))
     grafo.add_node("jumbo", crear_nodo_consultar("jumbo", consultar_jumbo))
     grafo.add_node("superboom", crear_nodo_consultar("superboom", consultar_superboom))

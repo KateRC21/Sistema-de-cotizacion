@@ -18,6 +18,8 @@ def crear_modelo() -> ChatOpenAI:
         temperature=config.temperatura,
         api_key=config.exigir_api_key(),
         base_url=config.base_url,
+        timeout=60,
+        max_retries=2,
     )
 
 

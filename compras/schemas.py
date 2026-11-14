@@ -237,6 +237,9 @@ class Cotizacion(_Modelo):
         default=None,
         description="Producto solicitado al que responde esta oferta.",
     )
+    url_imagen: str | None = Field(default=None, description="Foto pública del producto.")
+    id_sku: str | None = Field(default=None, description="SKU de la tienda, para armar el carrito.")
+    id_vendedor: str | None = Field(default=None, description="Vendedor del SKU en la tienda.")
 
 
 class ErrorConsulta(_Modelo):

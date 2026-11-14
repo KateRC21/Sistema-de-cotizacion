@@ -22,6 +22,8 @@ from compras.schemas import (
     TipoEscenario,
 )
 from tools.calculos import normalizar_medida
+from compras.carrito import empaques_necesarios
+from compras.schemas import Cotizacion
 
 _TIPOS: tuple[TipoEscenario, ...] = ("jumbo", "superboom", "combinado")
 # A igual cobertura e igual total parcial, una sola tienda evita un segundo desplazamiento.
@@ -33,11 +35,16 @@ _RELACION = {"equivalente": 0, "sustituto": 1, "no_comparable": 2}
 def construir_escenarios(
     solicitud: SolicitudInterpretada,
     grupos: list[GrupoItem],
+    elegidas: dict[str, Cotizacion] | None = None,
 ) -> list[EscenarioPresupuesto]:
-    """Jumbo, Superboom y la combinación. Cada producto aparece una vez en cada uno."""
+    """Jumbo, Superboom y la combinación. Cada producto aparece una vez en cada uno.
+
+    `elegidas` son las ofertas que la persona escogió: mandan en los escenarios
+    de su tienda y en el combinado. En la otra tienda sigue la mejor automática.
+    """
     por_item = {grupo.id_item: grupo.ofertas for grupo in grupos}
     return [
-        _escenario(tipo, solicitud, por_item)
+        _escenario(tipo, solicitud, por_item, elegidas or {})
         for tipo in _TIPOS
     ]
 
@@ -56,7 +63,7 @@ def elegir_oferta(
     ]
     if not candidatas:
         return None
-    return min(candidatas, key=_clave_oferta)
+    return min(candidatas, key=lambda oferta: _clave_oferta(oferta, item))
 
 
 def recomendar(
@@ -96,12 +103,17 @@ def _escenario(
     tipo: TipoEscenario,
     solicitud: SolicitudInterpretada,
     por_item: dict[str, list[OfertaEvaluada]],
+    elegidas: dict[str, Cotizacion],
 ) -> EscenarioPresupuesto:
     proveedor: Proveedor | None = None if tipo == "combinado" else tipo
-    lineas = [
-        _linea(item, elegir_oferta(item, por_item.get(item.id_item, []), proveedor))
-        for item in solicitud.items
-    ]
+    lineas = []
+    for item in solicitud.items:
+        ofertas = por_item.get(item.id_item, [])
+        propia = elegidas.get(item.id_item)
+        if propia is not None and (proveedor is None or propia.proveedor == proveedor):
+            lineas.append(_linea_elegida(item, propia, ofertas))
+        else:
+            lineas.append(_linea(item, elegir_oferta(item, ofertas, proveedor)))
     subtotal = sum(
         (linea.costo_adquisicion for linea in lineas if linea.cubierta),
         Decimal("0"),
@@ -115,6 +127,37 @@ def _escenario(
         costos_adicionales=[domicilio],
         total_parcial=subtotal,
         total_confirmado=None,
+    )
+
+
+def _linea_elegida(
+    item: ItemSolicitado,
+    elegida: Cotizacion,
+    ofertas: list[OfertaEvaluada],
+) -> LineaPresupuesto:
+    """Línea con la oferta que escogió la persona, aunque no sea la equivalente automática."""
+    evaluada = next(
+        (oferta for oferta in ofertas if oferta.cotizacion.id_oferta == elegida.id_oferta), None
+    )
+    if evaluada is not None and _puede_cubrir(item, evaluada):
+        return _linea(item, evaluada)
+    unidades = empaques_necesarios(item, elegida)
+    costo = (Decimal(unidades) * elegida.precio).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    comparable = evaluada is not None and evaluada.relacion in ("equivalente", "sustituto")
+    return LineaPresupuesto(
+        id_item=item.id_item,
+        nombre_solicitado=item.nombre,
+        cubierta=True,
+        id_oferta=elegida.id_oferta,
+        proveedor=elegida.proveedor,
+        nombre_oferta=elegida.nombre,
+        presentacion=elegida.presentacion,
+        precio_presentacion=elegida.precio,
+        unidades_a_comprar=unidades,
+        costo_adquisicion=costo,
+        relacion=evaluada.relacion if comparable else "sustituto",
     )
 
 
@@ -174,10 +217,16 @@ def _empaques(pedida: Decimal, presentacion: Decimal) -> int:
     return int((pedida / presentacion).to_integral_value(rounding=ROUND_CEILING))
 
 
-def _clave_oferta(oferta: OfertaEvaluada) -> tuple:
+def _costo_total(item: ItemSolicitado, oferta: OfertaEvaluada) -> Decimal:
+    """Lo que cuesta cubrir lo pedido con esta oferta, en empaques enteros."""
+    return oferta.cotizacion.precio * empaques_necesarios(item, oferta.cotizacion)
+
+
+def _clave_oferta(oferta: OfertaEvaluada, item: ItemSolicitado) -> tuple:
     precio = oferta.precio_por_unidad_base
     return (
         _RELACION[oferta.relacion],
+        _costo_total(item, oferta),
         precio is None,
         precio if precio is not None else Decimal("0"),
         oferta.cotizacion.proveedor,

@@ -134,6 +134,11 @@ def _oferta_sku(
         sku.get("unitMultiplier"),
     )
     item_id = str(sku.get("itemId") or "sku")
+    imagenes = sku.get("images") or []
+    url_imagen = None
+    if imagenes and isinstance(imagenes[0], dict):
+        url_imagen = str(imagenes[0].get("imageUrl") or "").strip() or None
+    id_vendedor = str(vendedores[0].get("sellerId") or "").strip() or None
     url = enlace or urljoin(base_url, str(sku.get("detailUrl") or ""))
     if url.startswith("/"):
         url = urljoin(base_url, url)
@@ -150,6 +155,9 @@ def _oferta_sku(
         fecha_consulta=fecha,
         disponibilidad=disponibilidad,
         id_item=id_item,
+        url_imagen=url_imagen,
+        id_sku=item_id if sku.get("itemId") else None,
+        id_vendedor=id_vendedor,
     )
 
 

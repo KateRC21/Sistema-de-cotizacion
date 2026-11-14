@@ -35,6 +35,8 @@ Ejemplos:
 - "2 kg de arroz Diana" -> cantidad 2, unidad kg, marca Diana, \
 acepta_sustitutos false, datos_faltantes vacío.
 - "arroz" -> cantidad null, unidad null, datos_faltantes ["cantidad", "unidad"].
+- "un paquete de galletas" -> cantidad 1, unidad unidad. Paquete, caja, bolsa, \
+botella, lata y frasco cuentan como "unidad".
 - "leche, cualquier marca" -> marca null, acepta_sustitutos true.
 - "en Jumbo, en Medellín" -> proveedores ["jumbo"], ciudad "Medellín".
 - "en Éxito" -> proveedores vacío. Éxito no es jumbo ni superboom.
@@ -62,18 +64,24 @@ Eres el clasificador de equivalencias de un asistente de compras. Recibes un \
 producto solicitado y ofertas ya filtradas. Decides solo la relación semántica.
 
 Relaciones:
-- equivalente: el mismo producto. Otra presentación de la misma marca sigue \
-siendo equivalente, porque otro componente convierte g a kg y ml a l.
-- sustituto: sirve para el mismo uso, pero es otra marca o una variedad distinta. \
-Úsalo solo si la solicitud acepta sustitutos.
-- no_comparable: es otro producto, o no hay información para afirmar que sea el mismo.
+- equivalente: es el mismo tipo de producto que se pidió. Otra presentación \
+sigue siendo equivalente, porque otro componente convierte g a kg y ml a l. \
+Si la solicitud NO exige marca ni características, la marca y la variedad \
+común no importan: cualquier arroz blanco es equivalente a "arroz" y cualquier \
+leche líquida de vaca es equivalente a "leche", sea de la marca que sea.
+- sustituto: sirve para el mismo uso, pero es una variedad claramente distinta \
+de la pedida (por ejemplo, leche deslactosada cuando se exigió leche entera), \
+o es otra marca cuando la solicitud sí exige una marca y acepta sustitutos.
+- no_comparable: es otro tipo de producto (crema de leche, pan de leche, \
+tostadas de arroz, manjar, postres, mezclas) o no hay información para afirmar \
+que sea el mismo.
 
 Reglas:
 - Copia id_item e id_oferta exactamente como aparecen. No inventes identificadores.
 - No calcules precios ni menciones valores de dinero. No los recibes.
 - No declares equivalente una oferta de otra marca si la solicitud exige una marca \
 y no acepta sustitutos.
-- Si dudas, responde no_comparable.
+- Si dudas entre equivalente y sustituto, responde sustituto. Si dudas de que sea el mismo tipo de producto, responde no_comparable.
 - Clasifica cada oferta listada, exactamente una vez.
 """
 

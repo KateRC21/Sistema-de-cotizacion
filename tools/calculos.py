@@ -25,6 +25,13 @@ _FACTOR: dict[str, tuple[Decimal, UnidadBase, Dimension]] = {
     "lt": (Decimal("1"), "l", "volumen"),
     "litro": (Decimal("1"), "l", "volumen"),
     "litros": (Decimal("1"), "l", "volumen"),
+    # Libra comercial colombiana: 500 g.
+    "libra": (Decimal("0.5"), "kg", "masa"),
+    "libras": (Decimal("0.5"), "kg", "masa"),
+    "lb": (Decimal("0.5"), "kg", "masa"),
+    "lbs": (Decimal("0.5"), "kg", "masa"),
+    "docena": (Decimal("12"), "unidad", "conteo"),
+    "docenas": (Decimal("12"), "unidad", "conteo"),
     "unidad": (Decimal("1"), "unidad", "conteo"),
     "unidades": (Decimal("1"), "unidad", "conteo"),
     "und": (Decimal("1"), "unidad", "conteo"),
@@ -43,6 +50,12 @@ def normalizar_medida(cantidad: Decimal, unidad: str) -> MedidaNormalizada | Non
         unidad=unidad_base,
         dimension=dimension,
     )
+
+
+def dimension_de(unidad: str | None) -> Dimension | None:
+    """masa, volumen o conteo; None si la unidad no se reconoce."""
+    destino = _FACTOR.get((unidad or "").strip().lower())
+    return destino[2] if destino else None
 
 
 def misma_dimension(unidad_a: str | None, unidad_b: str | None) -> bool:

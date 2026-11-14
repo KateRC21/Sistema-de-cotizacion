@@ -5,24 +5,37 @@ la unidad y el producto no se inventan: se pide el dato con interrupt()
 o se cierra la solicitud.
 """
 
+from decimal import Decimal
+
 from langgraph.types import interrupt
 
 from compras.routers import faltan_datos_esenciales
 from compras.schemas import EstadoCompra, SolicitudInterpretada, Suposicion
 
 
-def crear_nodo_validar(ciudad_defecto: str):
+def crear_nodo_validar(ciudad_defecto: str, suponer_cantidad: bool = False):
+    """Con `suponer_cantidad`, un producto sin cantidad o unidad se busca como 1 empaque.
+
+    Queda registrado como suposición y la persona puede ajustar la cantidad al
+    armar el carrito. Sin producto no se supone nada.
+    """
+
     def validar(state: EstadoCompra) -> dict:
         solicitud = state.solicitud
         if solicitud is None:
             return {"historial": ["[validar] No hay solicitud interpretada."]}
+        previas: list[Suposicion] = []
+        if suponer_cantidad and solicitud.items:
+            solicitud, previas = suponer_cantidades(solicitud)
         faltan = faltan_datos_esenciales(solicitud)
         if faltan:
             return {"historial": [f"[validar] faltan: {', '.join(faltan)}"]}
 
         nueva, suposiciones = aplicar_suposiciones(solicitud, ciudad_defecto=ciudad_defecto)
         ya = {(item.campo, item.valor) for item in state.suposiciones}
-        nuevas = [item for item in suposiciones if (item.campo, item.valor) not in ya]
+        nuevas = [
+            item for item in previas + suposiciones if (item.campo, item.valor) not in ya
+        ]
         tiendas = ",".join(nueva.proveedores) or "ninguna"
         return {
             "solicitud": nueva,
@@ -31,6 +44,33 @@ def crear_nodo_validar(ciudad_defecto: str):
         }
 
     return validar
+
+
+def suponer_cantidades(
+    solicitud: SolicitudInterpretada,
+) -> tuple[SolicitudInterpretada, list[Suposicion]]:
+    """Cantidad y unidad ausentes pasan a «1 unidad», con la suposición anotada."""
+    items = []
+    suposiciones: list[Suposicion] = []
+    for item in solicitud.items:
+        cambios: dict[str, object] = {}
+        if item.cantidad is None:
+            cambios["cantidad"] = Decimal("1")
+        if item.unidad is None:
+            cambios["unidad"] = "unidad"
+        if cambios:
+            suposiciones.append(
+                Suposicion(
+                    campo=f"cantidad de {item.nombre}",
+                    valor="1 unidad",
+                    motivo="El texto no dice la cantidad. Se busca 1 empaque; puedes cambiarlo en el carrito.",
+                )
+            )
+            item = item.model_copy(update=cambios)
+        items.append(item)
+    if not suposiciones:
+        return solicitud, []
+    return solicitud.model_copy(update={"items": items}), suposiciones
 
 
 def aplicar_suposiciones(
